@@ -1,0 +1,1160 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Chapter 17 - Legend Of Eiffel Tower</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Cinzel:wght@400;700;900&family=Rajdhani:wght@500;600;700&display=swap');
+
+        body {
+            margin: 0;
+            padding: 0;
+            overflow: hidden;
+            user-select: none;
+            background-color: #05050d;
+            font-family: 'Rajdhani', sans-serif;
+            color: #e2e8f0;
+        }
+
+        .cinzel-font {
+            font-family: 'Cinzel', serif;
+        }
+
+        #game-canvas {
+            width: 100vw;
+            height: 100vh;
+            display: block;
+        }
+
+        /* Custom Scrollbars */
+        ::-webkit-scrollbar {
+            width: 6px;
+        }
+        ::-webkit-scrollbar-track {
+            background: rgba(15, 23, 42, 0.6);
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #eab308;
+            border-radius: 3px;
+        }
+
+        /* Glassmorphism Panel UI */
+        .glass-panel {
+            background: rgba(10, 14, 26, 0.82);
+            backdrop-filter: blur(12px);
+            border: 1px solid rgba(234, 179, 8, 0.3);
+            box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.6);
+        }
+
+        .gold-glow {
+            text-shadow: 0 0 10px rgba(234, 179, 8, 0.7);
+        }
+
+        .purple-glow {
+            text-shadow: 0 0 10px rgba(168, 85, 247, 0.7);
+        }
+
+        /* Radar Mini-map Canvas */
+        #minimap-canvas {
+            border: 2px solid #eab308;
+            border-radius: 50%;
+            background: rgba(5, 5, 15, 0.9);
+        }
+
+        /* Touch Controls */
+        .touch-btn {
+            background: rgba(234, 179, 8, 0.25);
+            border: 2px solid rgba(234, 179, 8, 0.6);
+            backdrop-filter: blur(4px);
+            border-radius: 9999px;
+            touch-action: manipulation;
+        }
+        .touch-btn:active {
+            background: rgba(234, 179, 8, 0.6);
+        }
+
+        /* Damage flash FX */
+        @keyframes flashRed {
+            0% { opacity: 0.8; }
+            100% { opacity: 0; }
+        }
+        .damage-overlay {
+            animation: flashRed 0.4s ease-out forwards;
+        }
+    </style>
+</head>
+<body class="relative w-full h-screen overflow-hidden select-none bg-slate-950">
+
+    <canvas id="game-canvas"></canvas>
+
+    <!-- Damage Screen Flash -->
+    <div id="damage-flash" class="pointer-events-none absolute inset-0 bg-red-600/30 opacity-0 z-10"></div>
+
+    <!-- MAIN GAME HUD -->
+    <div id="hud-layer" class="absolute inset-0 pointer-events-none hidden z-20 flex flex-col justify-between p-4">
+        
+        <!-- TOP HUD: Stats, Mini-map, Quest Box -->
+        <div class="flex justify-between items-start w-full gap-4">
+            <!-- Player Stats -->
+            <div class="glass-panel p-4 rounded-xl w-72 pointer-events-auto space-y-2">
+                <div class="flex justify-between items-center">
+                    <span id="player-class-badge" class="text-xs font-bold px-2 py-0.5 rounded bg-amber-500/20 text-amber-300 border border-amber-500/40">ARCHITECT</span>
+                    <span id="player-level" class="text-sm font-extrabold text-amber-400 cinzel-font">LVL 1</span>
+                </div>
+                
+                <!-- Health Bar -->
+                <div>
+                    <div class="flex justify-between text-xs font-bold mb-1">
+                        <span class="text-red-400"><i class="fa-solid fa-heart mr-1"></i>HEALTH</span>
+                        <span id="hp-text" class="text-slate-300">100/100</span>
+                    </div>
+                    <div class="w-full h-3 bg-slate-900 rounded-full overflow-hidden border border-red-900/50">
+                        <div id="hp-bar" class="h-full bg-gradient-to-r from-red-600 to-rose-400 transition-all duration-300 w-full"></div>
+                    </div>
+                </div>
+
+                <!-- Mana / Stamina -->
+                <div>
+                    <div class="flex justify-between text-xs font-bold mb-1">
+                        <span class="text-cyan-400"><i class="fa-solid fa-bolt mr-1"></i>ENERGY</span>
+                        <span id="mp-text" class="text-slate-300">50/50</span>
+                    </div>
+                    <div class="w-full h-2.5 bg-slate-900 rounded-full overflow-hidden border border-cyan-900/50">
+                        <div id="mp-bar" class="h-full bg-gradient-to-r from-cyan-600 to-blue-400 transition-all duration-300 w-full"></div>
+                    </div>
+                </div>
+
+                <!-- XP Bar -->
+                <div>
+                    <div class="flex justify-between text-xs font-bold mb-1">
+                        <span class="text-purple-400"><i class="fa-solid fa-star mr-1"></i>EXP</span>
+                        <span id="xp-text" class="text-slate-300">0/100</span>
+                    </div>
+                    <div class="w-full h-2 bg-slate-900 rounded-full overflow-hidden border border-purple-900/50">
+                        <div id="xp-bar" class="h-full bg-gradient-to-r from-purple-600 to-fuchsia-400 transition-all duration-300 w-0"></div>
+                    </div>
+                </div>
+
+                <!-- Resources: Gold & Pride Meter -->
+                <div class="pt-2 border-t border-slate-700/50 flex justify-between text-xs font-bold">
+                    <span class="text-amber-400 flex items-center gap-1"><i class="fa-solid fa-coins"></i> <span id="gold-count">0</span> $</span>
+                    <span class="text-rose-400 flex items-center gap-1"><i class="fa-solid fa-crown"></i> PRIDE: <span id="pride-count">100</span>%</span>
+                </div>
+            </div>
+
+            <!-- Active Quest Tracker -->
+            <div id="quest-tracker" class="glass-panel p-4 rounded-xl w-80 pointer-events-auto border-l-4 border-l-amber-500">
+                <div class="text-xs uppercase font-extrabold tracking-wider text-amber-400 mb-1 flex items-center justify-between">
+                    <span><i class="fa-solid fa-compass mr-1"></i> Current Quest</span>
+                    <span id="quest-step" class="text-slate-400 text-[10px]">1/4</span>
+                </div>
+                <h4 id="quest-title" class="font-bold text-white text-base cinzel-font">1. Pride in the Air</h4>
+                <p id="quest-desc" class="text-xs text-slate-300 mt-1 leading-snug">Seek out Wizard Wizark Brusky at the Tower Entrance to hear his warning.</p>
+                <div class="mt-2 text-[11px] text-amber-300/80 font-mono" id="quest-objective">Objective: Talk to Wizark Brusky</div>
+            </div>
+
+            <!-- Mini Map & Camera Mode Controls -->
+            <div class="flex flex-col items-end gap-2 pointer-events-auto">
+                <div class="relative">
+                    <canvas id="minimap-canvas" width="120" height="120"></canvas>
+                    <div class="absolute inset-0 pointer-events-none flex items-center justify-center">
+                        <div class="w-2 h-2 rounded-full bg-amber-400 border border-black animate-ping"></div>
+                    </div>
+                </div>
+                <div class="flex gap-2">
+                    <button id="btn-cam-toggle" class="glass-panel px-3 py-1.5 rounded-lg text-xs font-bold hover:bg-amber-500/20 text-slate-200 border border-slate-600 transition">
+                        <i class="fa-solid fa-video mr-1"></i> <span id="cam-mode-text">3rd Person</span>
+                    </button>
+                    <button id="btn-menu-open" class="glass-panel px-3 py-1.5 rounded-lg text-xs font-bold hover:bg-amber-500/20 text-slate-200 border border-slate-600 transition">
+                        <i class="fa-solid fa-bars mr-1"></i> Menu
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- BOTTOM HUD: Interaction Prompt & Controls Legend -->
+        <div class="flex justify-between items-end w-full">
+            <!-- Controls Quick Info -->
+            <div class="glass-panel px-4 py-2 rounded-xl text-xs text-slate-300 hidden md:flex items-center gap-4">
+                <span><kbd class="px-1.5 py-0.5 rounded bg-slate-800 border border-slate-600 text-amber-400 font-mono">WASD</kbd> Move</span>
+                <span><kbd class="px-1.5 py-0.5 rounded bg-slate-800 border border-slate-600 text-amber-400 font-mono">SPACE</kbd> Jump</span>
+                <span><kbd class="px-1.5 py-0.5 rounded bg-slate-800 border border-slate-600 text-amber-400 font-mono">L-CLICK</kbd> Strike / Interaction</span>
+                <span><kbd class="px-1.5 py-0.5 rounded bg-slate-800 border border-slate-600 text-amber-400 font-mono">E</kbd> Interact NPC</span>
+            </div>
+
+            <!-- Interaction Prompt -->
+            <div id="interaction-prompt" class="glass-panel px-6 py-3 rounded-2xl border-2 border-amber-400/80 text-amber-300 text-center text-sm font-bold animate-bounce hidden mx-auto">
+                <i class="fa-solid fa-hand-pointer mr-2"></i> <span id="interaction-text">Press 'E' or Tap to Talk</span>
+            </div>
+
+            <!-- Mobile Action Buttons -->
+            <div class="flex gap-3 pointer-events-auto md:hidden">
+                <button id="btn-touch-attack" class="touch-btn w-14 h-14 flex items-center justify-center text-xl text-amber-300">
+                    <i class="fa-solid fa-wand-magic-sparkles"></i>
+                </button>
+                <button id="btn-touch-jump" class="touch-btn w-14 h-14 flex items-center justify-center text-xl text-amber-300">
+                    <i class="fa-solid fa-arrow-up"></i>
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <div id="touch-joystick-zone" class="absolute bottom-6 left-6 w-32 h-32 pointer-events-auto md:hidden z-30 hidden">
+        <div id="joystick-base" class="w-full h-full rounded-full border-2 border-amber-500/40 bg-slate-900/40 backdrop-filter backdrop-blur-sm relative flex items-center justify-center">
+            <div id="joystick-stick" class="w-12 h-12 rounded-full bg-amber-500/60 border border-amber-300 absolute"></div>
+        </div>
+    </div>
+
+    <div id="dialog-modal" class="fixed inset-0 z-40 bg-slate-950/80 backdrop-blur-md flex items-center justify-center p-4 hidden">
+        <div class="glass-panel max-w-2xl w-full p-6 rounded-2xl border-2 border-amber-500/50 shadow-2xl space-y-4">
+            <div class="flex items-center gap-4 border-b border-slate-700 pb-3">
+                <div id="dialog-avatar" class="w-14 h-14 rounded-full bg-purple-900/80 border-2 border-purple-400 flex items-center justify-center text-2xl text-purple-200">
+                    <i class="fa-solid fa-hat-wizard"></i>
+                </div>
+                <div>
+                    <h3 id="dialog-speaker" class="text-xl font-bold text-amber-400 cinzel-font">Wizark Brusky</h3>
+                    <p id="dialog-role" class="text-xs text-purple-300">Cosmic Wizard & Planet Guardian</p>
+                </div>
+            </div>
+            
+            <div id="dialog-body" class="text-slate-200 text-sm md:text-base leading-relaxed h-32 overflow-y-auto pr-2 italic">
+                "You there, Lodi M! Why have you created such horrific, deadly towers across the universe?"
+            </div>
+
+            <div class="flex justify-end gap-3 pt-2">
+                <button id="btn-dialog-next" class="px-6 py-2.5 rounded-xl bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-slate-950 font-bold shadow-lg transition">
+                    Continue <i class="fa-solid fa-arrow-right ml-1"></i>
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <div id="menu-modal" class="fixed inset-0 z-50 bg-slate-950/90 backdrop-blur-xl flex items-center justify-center p-4">
+        <div class="glass-panel max-w-4xl w-full max-h-[90vh] rounded-2xl border-2 border-amber-500/60 p-6 flex flex-col justify-between shadow-2xl">
+            
+            <!-- Menu Header Tabs -->
+            <div class="flex justify-between items-center border-b border-slate-700/80 pb-4">
+                <div>
+                    <h1 class="text-2xl md:text-3xl font-extrabold text-amber-400 cinzel-font gold-glow">Chapter 17</h1>
+                    <h2 class="text-xs md:text-sm text-amber-200 tracking-widest uppercase">Legend Of Eiffel Tower</h2>
+                </div>
+
+                <div class="flex gap-2" id="menu-tabs">
+                    <button data-tab="tab-story" class="tab-btn px-4 py-2 rounded-lg text-xs md:text-sm font-bold bg-amber-500/20 text-amber-300 border border-amber-500/50">Story Book</button>
+                    <button data-tab="tab-skills" class="tab-btn px-4 py-2 rounded-lg text-xs md:text-sm font-bold text-slate-400 hover:bg-slate-800">Skill Tree</button>
+                    <button data-tab="tab-inventory" class="tab-btn px-4 py-2 rounded-lg text-xs md:text-sm font-bold text-slate-400 hover:bg-slate-800">Inventory</button>
+                </div>
+            </div>
+
+            <!-- TAB CONTENT: Full Story Display -->
+            <div id="tab-story" class="tab-content py-4 overflow-y-auto space-y-4 my-2 text-slate-300 text-xs md:text-sm leading-relaxed pr-2">
+                <div class="p-3 bg-slate-900/60 rounded-xl border border-slate-700 text-amber-200 text-xs font-mono">
+                    <strong>Written by:</strong> Dorsky Pessiminsky New York & "The Rages Band" (Feb 15, 2020)
+                </div>
+                
+                <h3 class="text-lg font-bold text-amber-400 cinzel-font">Bedtime Stories: Legend Of Eiffel Tower</h3>
+                
+                <p>Once upon a time a strange looking man named <strong>Lodi M</strong> was uniquely skilled at building deadly, gruesome heights. He was a professional engineer who built tall skyscrapers instead of normal structures. Driven by pure pride and greed for money, Lodi M demanded that his Eiffel Tower must grow enormous, gigantic, and stupendous—taller than planets themselves.</p>
+                
+                <p>As he stood atop his tower without rest, a powerful cosmic wizard named <strong>Wizark Brusky</strong> appeared before him. Brusky warned him: <em>"Why have you created horrific towers long in the universe? You did not respect Planet Earth because your pride is in the air! You only care about money while putting people in danger of falling to death."</em></p>
+                
+                <p>Lodi M ignored Brusky's warning and opened the colossal Eiffel Tower height attraction for $1 entrance fee. Millions rushed in to gaze into outer space. But Brusky sealed the doors, locking everyone inside to teach Lodi M a lesson. Panic ensued, and terrified visitors sacrificed themselves, falling down into the earth below.</p>
+
+                <p>Wizard Brusky appeared once more, confronting Lodi M for his tragedy. As punishment, Brusky kicked Lodi M off the summit down into the earth. Though granted a second life to feel the remorse of his pride, Lodi M could not escape his destiny. Locked inside his own gigantic creation, he died and was buried at the base of the Legend of Eiffel Tower.</p>
+
+                <div class="p-4 bg-amber-500/10 border-l-4 border-amber-500 rounded-r-xl text-amber-300 font-semibold italic">
+                    <i class="fa-solid fa-scroll mr-2"></i><strong>Moral Lesson:</strong> Do not become full of pride because of money. If you do not save people from disaster, bad karma will not save you either. Be contented with what we have to avoid judgment that harms society.
+                </div>
+            </div>
+
+            <!-- TAB CONTENT: Skill Tree -->
+            <div id="tab-skills" class="tab-content py-4 hidden my-2">
+                <div class="flex justify-between items-center mb-4">
+                    <span class="text-sm font-bold text-slate-300">Skill Points Available: <span id="skill-points-display" class="text-amber-400 font-mono text-base">0</span></span>
+                    <span class="text-xs text-slate-400">Upgrade Lodi M's stats using EXP</span>
+                </div>
+                
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <!-- Skill 1 -->
+                    <div class="glass-panel p-4 rounded-xl border border-amber-500/30 flex flex-col justify-between">
+                        <div>
+                            <div class="text-amber-400 text-2xl mb-2"><i class="fa-solid fa-heart-pulse"></i></div>
+                            <h4 class="font-bold text-white text-base">Humility Shield</h4>
+                            <p class="text-xs text-slate-300 mt-1">Increases Max HP and reduces damage taken from Falling Spirits.</p>
+                        </div>
+                        <button class="btn-upgrade-skill mt-4 w-full py-2 bg-amber-500/20 hover:bg-amber-500/40 text-amber-300 border border-amber-500/50 rounded-lg text-xs font-bold transition" data-skill="hp">
+                            Upgrade (+25 HP) - Cost 1 SP
+                        </button>
+                    </div>
+
+                    <!-- Skill 2 -->
+                    <div class="glass-panel p-4 rounded-xl border border-cyan-500/30 flex flex-col justify-between">
+                        <div>
+                            <div class="text-cyan-400 text-2xl mb-2"><i class="fa-solid fa-feather-pointed"></i></div>
+                            <h4 class="font-bold text-white text-base">Agility Leap</h4>
+                            <p class="text-xs text-slate-300 mt-1">Increases Jump Height and movement speed across platforms.</p>
+                        </div>
+                        <button class="btn-upgrade-skill mt-4 w-full py-2 bg-cyan-500/20 hover:bg-cyan-500/40 text-cyan-300 border border-cyan-500/50 rounded-lg text-xs font-bold transition" data-skill="speed">
+                            Upgrade (+Jump Speed) - Cost 1 SP
+                        </button>
+                    </div>
+
+                    <!-- Skill 3 -->
+                    <div class="glass-panel p-4 rounded-xl border border-purple-500/30 flex flex-col justify-between">
+                        <div>
+                            <div class="text-purple-400 text-2xl mb-2"><i class="fa-solid fa-wand-magic-sparkles"></i></div>
+                            <h4 class="font-bold text-white text-base">Redemption Magic</h4>
+                            <p class="text-xs text-slate-300 mt-1">Enhances magic strike damage against Karma Specters.</p>
+                        </div>
+                        <button class="btn-upgrade-skill mt-4 w-full py-2 bg-purple-500/20 hover:bg-purple-500/40 text-purple-300 border border-purple-500/50 rounded-lg text-xs font-bold transition" data-skill="damage">
+                            Upgrade (+Attack Power) - Cost 1 SP
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- TAB CONTENT: Inventory -->
+            <div id="tab-inventory" class="tab-content py-4 hidden my-2">
+                <h4 class="font-bold text-amber-400 mb-3 text-sm">Collected Items & Key Artifacts</h4>
+                <div class="grid grid-cols-2 md:grid-cols-4 gap-3" id="inventory-grid">
+                    <div class="glass-panel p-3 rounded-xl border border-amber-500/30 flex items-center gap-3">
+                        <div class="w-10 h-10 rounded-lg bg-amber-500/20 border border-amber-400 flex items-center justify-center text-amber-300 text-xl"><i class="fa-solid fa-compass-drafting"></i></div>
+                        <div>
+                            <div class="text-xs font-bold text-slate-200">Architect Blueprint</div>
+                            <div class="text-[10px] text-slate-400">Class Emblem</div>
+                        </div>
+                    </div>
+                    <div id="inv-key" class="glass-panel p-3 rounded-xl border border-slate-700 opacity-40 flex items-center gap-3">
+                        <div class="w-10 h-10 rounded-lg bg-yellow-500/20 border border-yellow-400 flex items-center justify-center text-yellow-300 text-xl"><i class="fa-solid fa-key"></i></div>
+                        <div>
+                            <div class="text-xs font-bold text-slate-200">Golden Tower Key</div>
+                            <div class="text-[10px] text-slate-400">Locked Door Key</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Menu Actions Footer -->
+            <div class="flex justify-between items-center border-t border-slate-700/80 pt-4 mt-2">
+                <div class="text-xs text-slate-400">
+                    <i class="fa-solid fa-gamepad mr-1"></i> Interactive 3D Web Audio Engine
+                </div>
+                <button id="btn-start-game" class="px-8 py-3 rounded-xl bg-gradient-to-r from-amber-500 via-amber-400 to-yellow-500 hover:from-amber-400 hover:to-yellow-400 text-slate-950 font-black text-base shadow-xl transform transition hover:scale-105 active:scale-95 cinzel-font">
+                    <i class="fa-solid fa-play mr-2"></i> ENTER GAME
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const gameState = {
+            started: false,
+            paused: false,
+            currentQuestIndex: 0,
+            gold: 0,
+            pride: 100,
+            hasKey: false,
+            cameraMode: '3rd', // '3rd' or '1st'
+            player: {
+                level: 1,
+                xp: 0,
+                nextXp: 100,
+                hp: 100,
+                maxHp: 100,
+                mp: 50,
+                maxMp: 50,
+                skillPoints: 0,
+                attackDamage: 25,
+                jumpPower: 12,
+                moveSpeed: 10
+            },
+            quests: [
+                {
+                    title: "1. Pride in the Air",
+                    desc: "Walk up to Wizard Wizark Brusky at the Tower entrance.",
+                    objective: "Talk to Wizark Brusky",
+                    completed: false
+                },
+                {
+                    title: "2. The Price of Greed",
+                    desc: "Collect 5 Golden Money Bags floating along the high platforms.",
+                    objective: "Collect Money Bags (0/5)",
+                    count: 0,
+                    target: 5,
+                    completed: false
+                },
+                {
+                    title: "3. Unlock the Doors",
+                    desc: "Find the Golden Tower Key located at the mid deck to open locked doors.",
+                    objective: "Obtain Golden Tower Key",
+                    completed: false
+                },
+                {
+                    title: "4. Confrontation at Summit",
+                    desc: "Ascend to the highest platform of the planet-sized tower and confront Brusky's Karma Avatar.",
+                    objective: "Defeat Boss Karma Avatar",
+                    completed: false
+                }
+            ]
+        };
+
+        class SoundFX {
+            constructor() {
+                this.ctx = null;
+            }
+            init() {
+                if (!this.ctx) {
+                    this.ctx = new (window.AudioContext || window.webkitAudioContext)();
+                }
+            }
+            playTone(freq, duration = 0.1, type = 'sine') {
+                if (!this.ctx) return;
+                try {
+                    const osc = this.ctx.createOscillator();
+                    const gain = this.ctx.createGain();
+                    osc.type = type;
+                    osc.frequency.setValueAtTime(freq, this.ctx.currentTime);
+                    gain.gain.setValueAtTime(0.15, this.ctx.currentTime);
+                    gain.gain.exponentialRampToValueAtTime(0.01, this.ctx.currentTime + duration);
+                    osc.connect(gain);
+                    gain.connect(this.ctx.destination);
+                    osc.start();
+                    osc.stop(this.ctx.currentTime + duration);
+                } catch(e) {}
+            }
+            jump() { this.playTone(320, 0.15, 'square'); }
+            coin() { this.playTone(880, 0.2, 'sine'); }
+            attack() { this.playTone(180, 0.12, 'sawtooth'); }
+            quest() { 
+                this.playTone(523, 0.15); 
+                setTimeout(() => this.playTone(659, 0.15), 150);
+                setTimeout(() => this.playTone(783, 0.3), 300);
+            }
+            hit() { this.playTone(100, 0.2, 'triangle'); }
+        }
+        const sfx = new SoundFX();
+
+        let scene, camera, renderer, clock;
+        let playerMesh, playerBody, cameraPivot;
+        const keys = {};
+        let touchMove = { x: 0, y: 0 };
+        const colliders = [];
+        const moneyBags = [];
+        const enemies = [];
+        let keyItemMesh = null;
+        let bruskyNPC = null;
+        let bossMesh = null;
+
+        function init3D() {
+            const container = document.getElementById('game-canvas');
+            scene = new THREE.Scene();
+            scene.background = new THREE.Color(0x050714);
+            scene.fog = new THREE.FogExp2(0x050714, 0.012);
+
+            camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 1000);
+            clock = new THREE.Clock();
+
+            renderer = new THREE.WebGLRenderer({ canvas: container, antialias: true });
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+            renderer.shadowMap.enabled = true;
+
+            // Lights
+            const ambientLight = new THREE.AmbientLight(0x383860, 0.8);
+            scene.add(ambientLight);
+
+            const moonLight = new THREE.DirectionalLight(0x818cf8, 1.2);
+            moonLight.position.set(50, 150, 50);
+            moonLight.castShadow = true;
+            scene.add(moonLight);
+
+            // Sky Stars & Floating Planet Orbs
+            createCosmicSky();
+
+            // Build Eiffel Tower & Grounds
+            buildEiffelTowerEnvironment();
+
+            // Build Player
+            createPlayer();
+
+            // Build NPCs & Enemies
+            spawnNPCs();
+            spawnCollectibles();
+            spawnEnemies();
+
+            // Resize listener
+            window.addEventListener('resize', onWindowResize);
+        }
+
+        function createCosmicSky() {
+            const starsGeo = new THREE.BufferGeometry();
+            const count = 1200;
+            const positions = new Float32Array(count * 3);
+            for(let i = 0; i < count * 3; i++) {
+                positions[i] = (Math.random() - 0.5) * 600;
+            }
+            starsGeo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+            const starsMat = new THREE.PointsMaterial({ color: 0xffffff, size: 1.2, transparent: true });
+            const starField = new THREE.Points(starsGeo, starsMat);
+            scene.add(starField);
+
+            // Giant Cosmic Planet in Background
+            const planetGeo = new THREE.SphereGeometry(25, 32, 32);
+            const planetMat = new THREE.MeshBasicMaterial({ color: 0x8b5cf6, wireframe: true });
+            const planet = new THREE.Mesh(planetGeo, planetMat);
+            planet.position.set(-120, 180, -150);
+            scene.add(planet);
+        }
+
+        function buildEiffelTowerEnvironment() {
+            // Ground Grass / Cemetery Base
+            const groundGeo = new THREE.PlaneGeometry(300, 300);
+            const groundMat = new THREE.MeshStandardMaterial({ color: 0x0f172a, roughness: 0.9 });
+            const ground = new THREE.Mesh(groundGeo, groundMat);
+            ground.rotation.x = -Math.PI / 2;
+            ground.receiveShadow = true;
+            scene.add(ground);
+            colliders.push({ box: new THREE.Box3().setFromObject(ground), mesh: ground, isGround: true });
+
+            // Cemetery Gravestones at base
+            for(let i = 0; i < 15; i++) {
+                const grave = new THREE.Mesh(
+                    new THREE.BoxGeometry(1.2, 2, 0.4),
+                    new THREE.MeshStandardMaterial({ color: 0x475569 })
+                );
+                const angle = Math.random() * Math.PI * 2;
+                const dist = 25 + Math.random() * 30;
+                grave.position.set(Math.cos(angle) * dist, 1, Math.sin(angle) * dist);
+                grave.rotation.y = Math.random();
+                scene.add(grave);
+            }
+
+            // GIGANTIC EIFFEL TOWER STRUCTURE
+            const metalMat = new THREE.MeshStandardMaterial({ color: 0xd97706, metalness: 0.8, roughness: 0.3 });
+            
+            // Tower Legs
+            for(let i = 0; i < 4; i++) {
+                const angle = (i * Math.PI) / 2 + Math.PI / 4;
+                const leg = new THREE.Mesh(new THREE.CylinderGeometry(1.5, 3, 40, 6), metalMat);
+                leg.position.set(Math.cos(angle) * 18, 18, Math.sin(angle) * 18);
+                leg.rotation.z = Math.cos(angle) * -0.25;
+                leg.rotation.x = Math.sin(angle) * 0.25;
+                scene.add(leg);
+            }
+
+            // Platform Deck 1 (Low)
+            createTowerDeck(0, 35, 36, 36, metalMat);
+            
+            // Platform Deck 2 (Mid - Locked Door Area)
+            createTowerDeck(0, 75, 26, 26, metalMat);
+
+            // Platform Deck 3 (Summit Boss Arena)
+            createTowerDeck(0, 120, 18, 18, metalMat);
+
+            // Tower Central Pillar Shafts
+            const shaft = new THREE.Mesh(new THREE.CylinderGeometry(2, 6, 130, 8), metalMat);
+            shaft.position.set(0, 65, 0);
+            scene.add(shaft);
+
+            // Locked Golden Door at Mid Deck
+            const doorGeo = new THREE.BoxGeometry(6, 10, 0.5);
+            const doorMat = new THREE.MeshStandardMaterial({ color: 0xeab308, metalness: 0.9, roughness: 0.1 });
+            const door = new THREE.Mesh(doorGeo, doorMat);
+            door.position.set(0, 80, 12);
+            door.name = "LockedDoor";
+            scene.add(door);
+            colliders.push({ box: new THREE.Box3().setFromObject(door), mesh: door });
+        }
+
+        function createTowerDeck(x, y, width, depth, material) {
+            const deck = new THREE.Mesh(new THREE.BoxGeometry(width, 2, depth), material);
+            deck.position.set(x, y, x);
+            scene.add(deck);
+            colliders.push({ box: new THREE.Box3().setFromObject(deck), mesh: deck, isPlatform: true });
+
+            // Glowing Edge Beams
+            const edgeGeo = new THREE.BoxGeometry(width + 0.5, 0.4, depth + 0.5);
+            const edgeMat = new THREE.MeshBasicMaterial({ color: 0xf59e0b, wireframe: true });
+            const edge = new THREE.Mesh(edgeGeo, edgeMat);
+            edge.position.set(x, y + 1, x);
+            scene.add(edge);
+
+            // Stairways/Ramps connecting ground to upper decks
+            if (y === 35) {
+                const ramp = new THREE.Mesh(new THREE.BoxGeometry(6, 1, 45), material);
+                ramp.position.set(0, 17, 18);
+                ramp.rotation.x = -Math.PI / 5;
+                scene.add(ramp);
+                colliders.push({ box: new THREE.Box3().setFromObject(ramp), mesh: ramp });
+            }
+            if (y === 75) {
+                const ramp2 = new THREE.Mesh(new THREE.BoxGeometry(6, 1, 48), material);
+                ramp2.position.set(-14, 55, 0);
+                ramp2.rotation.z = Math.PI / 5;
+                scene.add(ramp2);
+                colliders.push({ box: new THREE.Box3().setFromObject(ramp2), mesh: ramp2 });
+            }
+            if (y === 120) {
+                const ramp3 = new THREE.Mesh(new THREE.BoxGeometry(6, 1, 52), material);
+                ramp3.position.set(0, 98, -12);
+                ramp3.rotation.x = Math.PI / 4.5;
+                scene.add(ramp3);
+                colliders.push({ box: new THREE.Box3().setFromObject(ramp3), mesh: ramp3 });
+            }
+        }
+
+        function createPlayer() {
+            playerBody = new THREE.Group();
+            
+            // Hero Mesh (Lodi M Architect)
+            const bodyGeo = new THREE.CylinderGeometry(0.6, 0.6, 1.8, 8);
+            const bodyMat = new THREE.MeshStandardMaterial({ color: 0x0284c7 });
+            const body = new THREE.Mesh(bodyGeo, bodyMat);
+            body.position.y = 0.9;
+            playerBody.add(body);
+
+            // Head
+            const headGeo = new THREE.SphereGeometry(0.4, 8, 8);
+            const headMat = new THREE.MeshStandardMaterial({ color: 0xfde047 });
+            const head = new THREE.Mesh(headGeo, headMat);
+            head.position.y = 2.1;
+            playerBody.add(head);
+
+            // Architect Hardhat / Crown
+            const hatGeo = new THREE.ConeGeometry(0.55, 0.4, 8);
+            const hatMat = new THREE.MeshStandardMaterial({ color: 0xeab308 });
+            const hat = new THREE.Mesh(hatGeo, hatMat);
+            hat.position.y = 2.4;
+            playerBody.add(hat);
+
+            playerBody.position.set(0, 2, 25);
+            scene.add(playerBody);
+
+            // Camera Pivot Attachment
+            cameraPivot = new THREE.Group();
+            playerBody.add(cameraPivot);
+            cameraPivot.position.set(0, 2, 0);
+        }
+
+        function spawnNPCs() {
+            // Wizard Wizark Brusky at Tower Entrance
+            bruskyNPC = new THREE.Group();
+            const wizardBody = new THREE.Mesh(
+                new THREE.ConeGeometry(0.8, 2.5, 8),
+                new THREE.MeshStandardMaterial({ color: 0x7e22ce })
+            );
+            wizardBody.position.y = 1.25;
+            bruskyNPC.add(wizardBody);
+
+            // Staff with glowing orb
+            const staff = new THREE.Mesh(
+                new THREE.CylinderGeometry(0.08, 0.08, 3.5),
+                new THREE.MeshStandardMaterial({ color: 0x78350f })
+            );
+            staff.position.set(0.8, 1.5, 0.4);
+            bruskyNPC.add(staff);
+
+            const orb = new THREE.Mesh(
+                new THREE.SphereGeometry(0.3, 12, 12),
+                new THREE.MeshBasicMaterial({ color: 0x38bdf8 })
+            );
+            orb.position.set(0.8, 3.3, 0.4);
+            bruskyNPC.add(orb);
+
+            bruskyNPC.position.set(5, 0, 15);
+            scene.add(bruskyNPC);
+        }
+
+        function spawnCollectibles() {
+            // 5 Money Bags floating on high platforms
+            const positions = [
+                { x: -8, y: 37, z: 8 },
+                { x: 10, y: 37, z: -10 },
+                { x: 0, y: 77, z: -8 },
+                { x: 8, y: 77, z: 8 },
+                { x: -6, y: 122, z: 0 }
+            ];
+
+            positions.forEach((pos, idx) => {
+                const bag = new THREE.Mesh(
+                    new THREE.SphereGeometry(0.7, 8, 8),
+                    new THREE.MeshStandardMaterial({ color: 0xeab308, metalness: 0.8 })
+                );
+                bag.position.set(pos.x, pos.y, pos.z);
+                bag.userData = { id: idx, collected: false };
+                scene.add(bag);
+                moneyBags.push(bag);
+            });
+
+            // Key at mid deck
+            keyItemMesh = new THREE.Mesh(
+                new THREE.TorusGeometry(0.5, 0.15, 8, 16),
+                new THREE.MeshBasicMaterial({ color: 0xfacc15 })
+            );
+            keyItemMesh.position.set(-10, 77, 10);
+            scene.add(keyItemMesh);
+        }
+
+        function spawnEnemies() {
+            // Greed Shadows / Karma Specters
+            const enemyPositions = [
+                { x: -5, y: 36, z: 0 },
+                { x: 5, y: 76, z: -5 },
+                { x: -8, y: 76, z: 5 }
+            ];
+
+            enemyPositions.forEach(pos => {
+                const spec = new THREE.Mesh(
+                    new THREE.OctahedronGeometry(0.9),
+                    new THREE.MeshBasicMaterial({ color: 0xef4444, wireframe: true })
+                );
+                spec.position.set(pos.x, pos.y, pos.z);
+                spec.userData = { hp: 40, maxHp: 40, speed: 2.5, attackCD: 0 };
+                scene.add(spec);
+                enemies.push(spec);
+            });
+
+            // Summit Boss: Karma Avatar
+            bossMesh = new THREE.Mesh(
+                new THREE.DodecahedronGeometry(2.5),
+                new THREE.MeshStandardMaterial({ color: 0xa855f7, wireframe: true })
+            );
+            bossMesh.position.set(0, 124, 0);
+            bossMesh.userData = { isBoss: true, hp: 200, maxHp: 200, attackCD: 0 };
+            scene.add(bossMesh);
+            enemies.push(bossMesh);
+        }
+
+        function setupInputs() {
+            window.addEventListener('keydown', e => { keys[e.code] = true; });
+            window.addEventListener('keyup', e => { keys[e.code] = false; });
+
+            // Keyboard Shortcuts
+            window.addEventListener('keydown', e => {
+                if (e.code === 'KeyE') triggerInteraction();
+                if (e.code === 'KeyM') toggleMenu();
+            });
+
+            // Left Click Attack
+            window.addEventListener('mousedown', e => {
+                if (gameState.started && !gameState.paused && e.button === 0) {
+                    playerAttack();
+                }
+            });
+
+            // UI Touch Buttons
+            document.getElementById('btn-touch-jump').addEventListener('touchstart', (e) => {
+                e.preventDefault();
+                doPlayerJump();
+            });
+            document.getElementById('btn-touch-attack').addEventListener('touchstart', (e) => {
+                e.preventDefault();
+                playerAttack();
+            });
+
+            // Touch Joystick Simulation
+            const joystickZone = document.getElementById('touch-joystick-zone');
+            const joystickStick = document.getElementById('joystick-stick');
+            let joystickActive = false;
+
+            joystickZone.addEventListener('touchstart', e => { joystickActive = true; });
+            joystickZone.addEventListener('touchmove', e => {
+                if (!joystickActive) return;
+                const touch = e.touches[0];
+                const rect = joystickZone.getBoundingClientRect();
+                const centerX = rect.left + rect.width / 2;
+                const centerY = rect.top + rect.height / 2;
+                let dx = touch.clientX - centerX;
+                let dy = touch.clientY - centerY;
+                const dist = Math.hypot(dx, dy);
+                const maxR = rect.width / 2;
+                if (dist > maxR) { dx = (dx / dist) * maxR; dy = (dy / dist) * maxR; }
+                joystickStick.style.transform = `translate(${dx}px, ${dy}px)`;
+                touchMove.x = dx / maxR;
+                touchMove.y = dy / maxR;
+            });
+            joystickZone.addEventListener('touchend', () => {
+                joystickActive = false;
+                joystickStick.style.transform = `translate(0px, 0px)`;
+                touchMove = { x: 0, y: 0 };
+            });
+        }
+
+        let isGrounded = true;
+        let verticalVelocity = 0;
+
+        function doPlayerJump() {
+            if (isGrounded) {
+                verticalVelocity = gameState.player.jumpPower;
+                isGrounded = false;
+                sfx.jump();
+            }
+        }
+
+        function playerAttack() {
+            sfx.attack();
+            
+            // Spawn Attack Ring FX
+            const fxGeo = new THREE.RingGeometry(0.5, 2.5, 16);
+            const fxMat = new THREE.MeshBasicMaterial({ color: 0x38bdf8, side: THREE.DoubleSide, transparent: true, opacity: 0.8 });
+            const fx = new THREE.Mesh(fxGeo, fxMat);
+            fx.rotation.x = Math.PI / 2;
+            fx.position.copy(playerBody.position);
+            fx.position.y += 0.5;
+            scene.add(fx);
+
+            setTimeout(() => scene.remove(fx), 200);
+
+            // Hitbox Check against nearby enemies
+            enemies.forEach((enemy, idx) => {
+                const dist = playerBody.position.distanceTo(enemy.position);
+                if (dist < 4.5) {
+                    enemy.userData.hp -= gameState.player.attackDamage;
+                    sfx.hit();
+                    
+                    // Show floating damage visual indicator
+                    if (enemy.userData.hp <= 0) {
+                        scene.remove(enemy);
+                        enemies.splice(idx, 1);
+                        addXp(35);
+                        
+                        // If boss defeated
+                        if (enemy.userData.isBoss) {
+                            completeQuest(3);
+                            showDialog("Wizark Brusky", "You have defeated the Karma Avatar, Lodi M. Yet the lesson remains forever: Pride leads to downfall. Be humble and guard humanity!", "Cosmic Wizard");
+                        }
+                    }
+                }
+            });
+        }
+
+        function updateGame(delta) {
+            if (!gameState.started || gameState.paused) return;
+
+            // Player Movement Logic
+            let moveX = 0;
+            let moveZ = 0;
+
+            if (keys['KeyW'] || keys['ArrowUp']) moveZ -= 1;
+            if (keys['KeyS'] || keys['ArrowDown']) moveZ += 1;
+            if (keys['KeyA'] || keys['ArrowLeft']) moveX -= 1;
+            if (keys['KeyD'] || keys['ArrowRight']) moveX += 1;
+
+            if (touchMove.x !== 0 || touchMove.y !== 0) {
+                moveX = touchMove.x;
+                moveZ = touchMove.y;
+            }
+
+            if (keys['Space']) doPlayerJump();
+
+            const moveDir = new THREE.Vector3(moveX, 0, moveZ).normalize();
+            if (moveDir.length() > 0) {
+                const speed = gameState.player.moveSpeed * delta;
+                playerBody.translateOnAxis(moveDir, speed);
+            }
+
+            // Gravity & Ground Check
+            verticalVelocity -= 28 * delta;
+            playerBody.position.y += verticalVelocity * delta;
+
+            // Platform Collision Logic
+            if (playerBody.position.y <= 0.9) {
+                playerBody.position.y = 0.9;
+                verticalVelocity = 0;
+                isGrounded = true;
+            } else {
+                // Check decks/platforms
+                colliders.forEach(col => {
+                    if (col.isPlatform) {
+                        const box = col.box;
+                        if (Math.abs(playerBody.position.x - col.mesh.position.x) < 14 &&
+                            Math.abs(playerBody.position.z - col.mesh.position.z) < 14) {
+                            const deckTop = col.mesh.position.y + 1.8;
+                            if (playerBody.position.y <= deckTop && playerBody.position.y >= deckTop - 1.5 && verticalVelocity <= 0) {
+                                playerBody.position.y = deckTop;
+                                verticalVelocity = 0;
+                                isGrounded = true;
+                            }
+                        }
+                    }
+                });
+            }
+
+            // Rotate Money Bags & Collect Check
+            moneyBags.forEach(bag => {
+                if (!bag.userData.collected) {
+                    bag.rotation.y += 2 * delta;
+                    if (playerBody.position.distanceTo(bag.position) < 2.0) {
+                        bag.userData.collected = true;
+                        scene.remove(bag);
+                        gameState.gold += 50;
+                        sfx.coin();
+                        updateHUD();
+
+                        if (gameState.currentQuestIndex === 1) {
+                            const q = gameState.quests[1];
+                            q.count++;
+                            q.objective = `Collect Money Bags (${q.count}/${q.target})`;
+                            if (q.count >= q.target) completeQuest(1);
+                            updateQuestUI();
+                        }
+                    }
+                }
+            });
+
+            // Key Pickup Check
+            if (keyItemMesh && playerBody.position.distanceTo(keyItemMesh.position) < 2.2) {
+                scene.remove(keyItemMesh);
+                keyItemMesh = null;
+                gameState.hasKey = true;
+                sfx.quest();
+                document.getElementById('inv-key').classList.remove('opacity-40');
+                if (gameState.currentQuestIndex === 2) completeQuest(2);
+            }
+
+            // Enemies AI & Combat Update
+            enemies.forEach(enemy => {
+                const dist = enemy.position.distanceTo(playerBody.position);
+                if (dist < 15) {
+                    // Move towards player
+                    const dir = new THREE.Vector3().subVectors(playerBody.position, enemy.position).normalize();
+                    enemy.position.addScaledVector(dir, (enemy.userData.speed || 2) * delta);
+
+                    // Attack Player
+                    if (dist < 2.0) {
+                        if (!enemy.userData.attackCD || enemy.userData.attackCD <= 0) {
+                            damagePlayer(12);
+                            enemy.userData.attackCD = 1.5; // 1.5s cooldown
+                        }
+                    }
+                }
+                if (enemy.userData.attackCD > 0) enemy.userData.attackCD -= delta;
+            });
+
+            // Check NPC Proximity Prompt
+            const distBrusky = playerBody.position.distanceTo(bruskyNPC.position);
+            const prompt = document.getElementById('interaction-prompt');
+            if (distBrusky < 4.0) {
+                prompt.classList.remove('hidden');
+                document.getElementById('interaction-text').innerText = "Press 'E' to speak with Wizark Brusky";
+            } else {
+                prompt.classList.add('hidden');
+            }
+
+            // Camera Tracking
+            if (gameState.cameraMode === '3rd') {
+                camera.position.set(playerBody.position.x, playerBody.position.y + 4, playerBody.position.z + 10);
+            } else {
+                camera.position.set(playerBody.position.x, playerBody.position.y + 2, playerBody.position.z);
+            }
+            camera.lookAt(playerBody.position.x, playerBody.position.y + 2, playerBody.position.z);
+
+            // Render Radar Mini Map
+            renderMinimap();
+        }
+
+        function triggerInteraction() {
+            const distBrusky = playerBody.position.distanceTo(bruskyNPC.position);
+            if (distBrusky < 4.0) {
+                if (gameState.currentQuestIndex === 0) {
+                    showDialog("Wizark Brusky", "You there, Lodi M! Why have you created such horrific, deadly towers across the universe? You didn't respect Planet Earth because your pride is in the air!", "Cosmic Wizard");
+                    completeQuest(0);
+                } else {
+                    showDialog("Wizark Brusky", "Money will not save you from karma! Ascend the Eiffel Tower and unlock the doors before disaster strikes!", "Cosmic Wizard");
+                }
+            }
+        }
+
+        function completeQuest(index) {
+            if (gameState.quests[index] && !gameState.quests[index].completed) {
+                gameState.quests[index].completed = true;
+                sfx.quest();
+                addXp(50);
+                if (gameState.currentQuestIndex === index && gameState.currentQuestIndex < gameState.quests.length - 1) {
+                    gameState.currentQuestIndex++;
+                }
+                updateQuestUI();
+            }
+        }
+
+        function damagePlayer(amount) {
+            gameState.player.hp = Math.max(0, gameState.player.hp - amount);
+            sfx.hit();
+            
+            // Screen flash
+            const flash = document.getElementById('damage-flash');
+            flash.classList.add('damage-overlay');
+            setTimeout(() => flash.classList.remove('damage-overlay'), 400);
+
+            updateHUD();
+
+            if (gameState.player.hp <= 0) {
+                showDialog("Wizark Brusky", "You have fallen, Lodi M. Remember this pain and repent your greed!", "Karma Judgment");
+                playerBody.position.set(0, 2, 25);
+                gameState.player.hp = gameState.player.maxHp;
+                updateHUD();
+            }
+        }
+
+        function addXp(amount) {
+            gameState.player.xp += amount;
+            if (gameState.player.xp >= gameState.player.nextXp) {
+                gameState.player.level++;
+                gameState.player.xp -= gameState.player.nextXp;
+                gameState.player.nextXp += 50;
+                gameState.player.skillPoints++;
+                sfx.quest();
+            }
+            updateHUD();
+        }
+
+        function updateHUD() {
+            document.getElementById('hp-bar').style.width = `${(gameState.player.hp / gameState.player.maxHp) * 100}%`;
+            document.getElementById('hp-text').innerText = `${gameState.player.hp}/${gameState.player.maxHp}`;
+            
+            document.getElementById('xp-bar').style.width = `${(gameState.player.xp / gameState.player.nextXp) * 100}%`;
+            document.getElementById('xp-text').innerText = `${gameState.player.xp}/${gameState.player.nextXp}`;
+
+            document.getElementById('gold-count').innerText = gameState.gold;
+            document.getElementById('player-level').innerText = `LVL ${gameState.player.level}`;
+            document.getElementById('skill-points-display').innerText = gameState.player.skillPoints;
+        }
+
+        function updateQuestUI() {
+            const q = gameState.quests[gameState.currentQuestIndex];
+            if (q) {
+                document.getElementById('quest-title').innerText = q.title;
+                document.getElementById('quest-desc').innerText = q.desc;
+                document.getElementById('quest-objective').innerText = `Objective: ${q.objective}`;
+                document.getElementById('quest-step').innerText = `${gameState.currentQuestIndex + 1}/4`;
+            }
+        }
+
+        function renderMinimap() {
+            const miniCanvas = document.getElementById('minimap-canvas');
+            const ctx = miniCanvas.getContext('2d');
+            ctx.clearRect(0, 0, 120, 120);
+
+            // Center Player
+            const cx = 60;
+            const cy = 60;
+            const scale = 0.5;
+
+            // Draw Tower Base
+            ctx.strokeStyle = '#eab308';
+            ctx.beginPath();
+            ctx.arc(cx, cy, 25 * scale, 0, Math.PI * 2);
+            ctx.stroke();
+
+            // Draw Wizark Brusky NPC
+            const bruskyRelX = (bruskyNPC.position.x - playerBody.position.x) * scale;
+            const bruskyRelZ = (bruskyNPC.position.z - playerBody.position.z) * scale;
+            ctx.fillStyle = '#a855f7';
+            ctx.beginPath();
+            ctx.arc(cx + bruskyRelX, cy + bruskyRelZ, 4, 0, Math.PI * 2);
+            ctx.fill();
+
+            // Draw Player Icon
+            ctx.fillStyle = '#38bdf8';
+            ctx.beginPath();
+            ctx.arc(cx, cy, 4, 0, Math.PI * 2);
+            ctx.fill();
+        }
+
+        function showDialog(speaker, text, role = "NPC") {
+            document.getElementById('dialog-speaker').innerText = speaker;
+            document.getElementById('dialog-role').innerText = role;
+            document.getElementById('dialog-body').innerText = `"${text}"`;
+            document.getElementById('dialog-modal').classList.remove('hidden');
+            gameState.paused = true;
+        }
+
+        document.getElementById('btn-dialog-next').addEventListener('click', () => {
+            document.getElementById('dialog-modal').classList.add('hidden');
+            gameState.paused = false;
+        });
+
+        function toggleMenu() {
+            const menu = document.getElementById('menu-modal');
+            if (menu.classList.contains('hidden')) {
+                menu.classList.remove('hidden');
+                gameState.paused = true;
+            } else {
+                menu.classList.add('hidden');
+                gameState.paused = false;
+            }
+        }
+
+        document.getElementById('btn-menu-open').addEventListener('click', toggleMenu);
+        document.getElementById('btn-start-game').addEventListener('click', () => {
+            sfx.init();
+            document.getElementById('menu-modal').classList.add('hidden');
+            document.getElementById('hud-layer').classList.remove('hidden');
+            document.getElementById('touch-joystick-zone').classList.remove('hidden');
+            gameState.started = true;
+            gameState.paused = false;
+        });
+
+        // Tab Switching
+        document.querySelectorAll('.tab-btn').forEach(btn => {
+            btn.addEventListener('click', () => {
+                document.querySelectorAll('.tab-btn').forEach(b => {
+                    b.classList.remove('bg-amber-500/20', 'text-amber-300', 'border', 'border-amber-500/50');
+                    b.classList.add('text-slate-400');
+                });
+                btn.classList.add('bg-amber-500/20', 'text-amber-300', 'border', 'border-amber-500/50');
+                btn.classList.remove('text-slate-400');
+
+                document.querySelectorAll('.tab-content').forEach(tc => tc.classList.add('hidden'));
+                const target = btn.getAttribute('data-tab');
+                document.getElementById(target).classList.remove('hidden');
+            });
+        });
+
+        // Camera Toggle Button
+        document.getElementById('btn-cam-toggle').addEventListener('click', () => {
+            gameState.cameraMode = gameState.cameraMode === '3rd' ? '1st' : '3rd';
+            document.getElementById('cam-mode-text').innerText = gameState.cameraMode === '3rd' ? '3rd Person' : '1st Person';
+        });
+
+        // Skill Upgrades
+        document.querySelectorAll('.btn-upgrade-skill').forEach(btn => {
+            btn.addEventListener('click', () => {
+                const skill = btn.getAttribute('data-skill');
+                if (gameState.player.skillPoints > 0) {
+                    gameState.player.skillPoints--;
+                    if (skill === 'hp') gameState.player.maxHp += 25;
+                    if (skill === 'speed') gameState.player.moveSpeed += 2;
+                    if (skill === 'damage') gameState.player.attackDamage += 10;
+                    sfx.quest();
+                    updateHUD();
+                }
+            });
+        });
+
+        function onWindowResize() {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        }
+
+        function animate() {
+            requestAnimationFrame(animate);
+            const delta = clock.getDelta();
+            updateGame(delta);
+            renderer.render(scene, camera);
+        }
+
+        window.onload = function() {
+            init3D();
+            setupInputs();
+            updateQuestUI();
+            animate();
+        };
+    </script>
+</body>
+</html>
